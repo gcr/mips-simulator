@@ -55,6 +55,8 @@
     
     (define/public (set-pc! val)
       (set! pc val))
+    (define/public (get-pc val)
+      pc)
     
     (define/public (step-one!)
       (let* ([next-instruction (mem-word pc #f)]

@@ -13,6 +13,13 @@
     (+ (arithmetic-shift (bitwise-bit-field (- leftmost-bit) 0 16)
                          16)
        (bitwise-bit-field n 0 16))))
+
+(define (signed n)
+  ;; usually registers are 32-bit unsigned.
+  ;; this converts them into 32-bit signed.
+  ;; (dirty hack, teehee!)
+  (integer-bytes->integer (integer->integer-bytes n 4 #f #t)
+                          #t #t))
   
 (define opcode-table
   (list
@@ -51,6 +58,18 @@
         [matches '([#x0 6] 5 5 5 5 [#x23 6])]
         [funct (λ (rs rt rd shamt mips)
                  (set-reg! mips rd (- (get-reg mips rs) (get-reg mips rt))))])
+   
+   (new opcode%
+        [name "and"]
+        [matches '([#x0 6] 5 5 5 5 [#x24 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (bitwise-and (get-reg mips rs) (get-reg mips rt))))])
+   
+   (new opcode%
+        [name "andi"]
+        [matches '([#xc 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (set-reg! mips rt (bitwise-and (get-reg mips rs) imm)))])
    
    ))
 
