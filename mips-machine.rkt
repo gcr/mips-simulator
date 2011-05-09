@@ -74,10 +74,12 @@
     (define/public (reset-pc-data!)
       (set! pc 0))
     
+    (define/public (add-bytes-at! addr b)
+      ;(unless (= (modulo addr 4) 0)
+      ;    (error 'add-bytes! "tried to change memory at address 0x~x which isn't word-aligned" pc))
+      (bytes-copy! memory addr b))
     (define/public (add-bytes! b)
-      (unless (= (modulo pc 4) 0)
-          (error 'add-bytes! "tried to change memory at address 0x~x which isn't word-aligned" pc))
-      (bytes-copy! memory pc b)
+      (add-bytes-at! pc b)
       (set! pc (+ pc (bytes-length b))))
     
     (define/public (align! power-of-two)

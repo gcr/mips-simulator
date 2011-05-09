@@ -276,7 +276,7 @@
         [matches '([#x0 26] [#xb 6])]
         [funct (λ (mips)
                  (let ([v0 (get-reg mips 2)]
-                       [a0 (get-reg mips 4)])
+                       [a0 (get-reg mips 4)] [a1 (get-reg mips 5)])
                    (match v0
                      [1 (displayln (signed a0))]
                      [4 (let next-byte ([addr a0])
@@ -285,6 +285,13 @@
                               (display (integer->char b))
                               (next-byte (+ 1 addr)))))]
                      [5 (set-reg! mips 2 (string->number (read-line)))]
+                     [8 (let* ([addr a0]
+                               [buf-len a1]
+                               [bytes (string->bytes/utf-8 (read-line))]
+                               [actual-bytes (if (< buf-len (bytes-length bytes))
+                                                 (subbytes bytes 0 buf-len)
+                                                 bytes)])
+                          (send mips add-bytes-at! addr actual-bytes))]
                      [10 (error 'exit)])))])
    
    ))

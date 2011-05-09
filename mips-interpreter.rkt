@@ -10,7 +10,7 @@
 ; TOKENIZING
 (define-tokens value-tokens (REGISTER LITERAL LABEL WORD SECTION STRING))
 (define-empty-tokens punctuation-tokens (NEWLINE COMMA OP CP EOF))
-(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui lw li la sb sh sw div divu mult multu bclt bclf syscall .text .data .asciiz .ascii .align))
+(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui lw li la sb sh sw div divu mult multu bclt bclf syscall .text .data .asciiz .ascii .align .space))
 
 (define-lex-abbrevs
   ;; (:/ 0 9) would not work because the lexer does not understand numbers.  (:/ #\0 #\9) is ok too.
@@ -18,7 +18,7 @@
   [number (:: (:? #\-)
               (:? (:: #\0 #\x))
               (:+ digit))]
-  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "lw" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf" "syscall" ".text" ".data" ".asciiz" ".ascii" ".align")]
+  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "lw" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf" "syscall" ".text" ".data" ".asciiz" ".ascii" ".align" ".space")]
   [word (:+ (:or alphabetic digit #\_))])
 
 (define get-string-token
@@ -107,17 +107,19 @@
      ; most of these are passing the list to 'load-op!' above which handles all the dirty work
      (line [(LABEL)
             (new-label! $1)]
-           [(.text NEWLINE)
+           [(.text)
             (send machine reset-pc-text!)]
-           [(.data NEWLINE)
+           [(.data)
             (send machine reset-pc-data!)]
-           [(.asciiz STRING NEWLINE)
+           [(.asciiz STRING)
             (send machine add-bytes! (bytes-append (string->bytes/utf-8 $2) #"\0"))]
-           [(.ascii STRING NEWLINE)
+           [(.ascii STRING)
             (send machine add-bytes! (string->bytes/utf-8 $2))]
-           [(.align LITERAL NEWLINE)
+           [(.space LITERAL)
+            (send machine add-bytes! (make-bytes $2))]
+           [(.align LITERAL)
             (send machine align! $2)]
-           [(SECTION LITERAL NEWLINE)
+           [(SECTION LITERAL)
             `(declaration-literal ,$1 ,$2)] ; TODO
            
            ; Here we define how each opcode is read. We may switch
@@ -125,106 +127,102 @@
            ; semantic structure of the opcode to the actual binary.
            
            ; add rd, rs, rt
-           [(add REGISTER COMMA REGISTER COMMA REGISTER NEWLINE) ; how it's read
+           [(add REGISTER COMMA REGISTER COMMA REGISTER) ; how it's read
             (load-op! "add" $4 $6 $2 0)]                         ; how it's encoded
            ;                rs rt rd shamt
            
-           [(sub REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(sub REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "sub"  $4 $6 $2 0)]
-           [(addi REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(addi REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "addi"  $4 $2 $6)]
-           [(addu REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(addu REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "addu"  $4 $6 $2 0)]
-           [(addiu REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(addiu REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "addiu"  $4 $2 $6)]
-           [(and REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(and REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "and"  $4 $6 $2 0)]
-           [(andi REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(andi REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "andi"  $4 $2 $6)]
-           [(nor REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(nor REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "nor"  $4 $6 $2 0)]
-           [(or REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(or REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "or"  $4 $6 $2 0)]
-           [(ori REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(ori REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "ori"  $4 $2 $6)]
-           [(xor REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(xor REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "xor"  $4 $6 $2 0)]
-           [(xori REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(xori REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "xori"  $4 $2 $6)]
-           [(sll REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(sll REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "sll"  0 $4 $2 $6)]
-           [(srl REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(srl REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "srl"  0 $4 $2 $6)]
-           [(sra REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(sra REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "sra"  0 $4 $2 $6)]
-           [(sllv REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(sllv REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "sllv"  $2 $4 $6 0)]
-           [(srlv REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(srlv REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "srlv"  $2 $4 $6 0)]
-           [(srav REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(srav REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "srav"  $2 $4 $6 0)]
-           [(slt REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(slt REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "slt"  $4 $6 $2 0)]
-           [(slti REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(slti REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "slti"  $4 $2 $6)]
-           [(sltiu REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+           [(sltiu REGISTER COMMA REGISTER COMMA LITERAL)
             (load-op! "sltiu"  $4 $2 $6)]
-           [(sltu REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+           [(sltu REGISTER COMMA REGISTER COMMA REGISTER)
             (load-op! "sltu"  $4 $6 $2 0)]
-           [(beq REGISTER COMMA REGISTER COMMA WORD NEWLINE)
+           [(beq REGISTER COMMA REGISTER COMMA WORD)
             (defer-op! "beq"  $2 $4 `(branch ,$6))]
-           [(bne REGISTER COMMA REGISTER COMMA WORD NEWLINE)
+           [(bne REGISTER COMMA REGISTER COMMA WORD)
             (defer-op! "bne"  $2 $4 `(branch ,$6))]
-           [(blt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+           [(blt REGISTER COMMA REGISTER COMMA WORD) ; TODO TEST!!!
             (begin (load-op! "slt"  $2 $4 (which-register? "at") 0)
                    (defer-op! "bne"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
-           [(bgt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+           [(bgt REGISTER COMMA REGISTER COMMA WORD) ; TODO TEST!!!
             (begin (load-op! "slt"  $4 $2 (which-register? "at") 0)
                    (defer-op! "bne"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
-           [(ble REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+           [(ble REGISTER COMMA REGISTER COMMA WORD) ; TODO TEST!!!
             (begin (load-op! "slt"  $4 $2 (which-register? "at") 0)
                    (defer-op! "beq"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
-           [(bge REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+           [(bge REGISTER COMMA REGISTER COMMA WORD) ; TODO TEST!!!
             (begin (load-op! "slt"  $2 $4 (which-register? "at") 0)
                    (defer-op! "beq"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
-           [(j WORD NEWLINE)
+           [(j WORD)
             (defer-op! "j" `(jump ,$2))]
-           [(jal WORD NEWLINE)
+           [(jal WORD)
             (defer-op! "jal" `(jump ,$2))]
-           [(jr REGISTER NEWLINE)
+           [(jr REGISTER)
             (load-op! "jr" $2 0 0 0)]
-           [(jalr REGISTER NEWLINE)
+           [(jalr REGISTER)
             (load-op! "jalr" $2 0 0 0)]
-           [(move REGISTER COMMA REGISTER NEWLINE)
+           [(move REGISTER COMMA REGISTER)
             (load-op! "add" 0 $4 $2 0)]
-           [(syscall NEWLINE)
+           [(syscall)
             (load-op! "syscall")]
-           [(lb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
+           [(lb REGISTER COMMA LITERAL OP REGISTER CP)
             (load-op! "lb" $6 $2 $4)]
-           [(lbu REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
+           [(lbu REGISTER COMMA LITERAL OP REGISTER CP)
             (load-op! "lbu" $6 $2 $4)]
-           [(lh REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
+           [(lh REGISTER COMMA LITERAL OP REGISTER CP)
             (load-op! "lh" $6 $2 $4)]
-           [(lhu REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
+           [(lhu REGISTER COMMA LITERAL OP REGISTER CP)
             (load-op! "lhu" $6 $2 $4)]
-           [(lui REGISTER COMMA LITERAL NEWLINE)
+           [(lui REGISTER COMMA LITERAL)
             (load-op! "lui" 0 $2 $4)]
-           [(lw REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
+           [(lw REGISTER COMMA LITERAL OP REGISTER CP)
             (load-op! "lw" $6 $2 $4)]
-           [(li REGISTER COMMA LITERAL NEWLINE)
+           [(li REGISTER COMMA LITERAL)
             (begin (load-op! "lui" 0 $2 (bitwise-bit-field $4 16 32))
                    (load-op! "ori" $2 $2 (bitwise-bit-field $4 0 16)))]
-           [(la REGISTER COMMA WORD NEWLINE)
+           [(la REGISTER COMMA WORD)
             (begin (defer-op! "lui" 0 $2 `(la-high ,$4))
                    (defer-op! "ori" $2 $2 `(la-low ,$4)))]
-           [(sb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
+           [(sb REGISTER COMMA LITERAL OP REGISTER CP)
             (load-op! "sb" $6 $2 $4)]
-           [(sw REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op! "sw" $6 $2 $4)]
-           
-           
-           
-           )))
+           [(sw REGISTER COMMA LITERAL OP REGISTER CP)
+            (load-op! "sw" $6 $2 $4)])))
    lexer)
   (when (> (length post-compile-operations) 0)
     (displayln "Second pass...")
@@ -261,8 +259,9 @@ EOF
 
 .data
 a:   .asciiz "Hello there, enter your name> "
-.align 2
-b:   .asciiz "Thank you.\n"
+b:   .asciiz "Thank you, "
+c:   .asciiz "!\n"
+spc: .space 11
 .align 2
 
 .text
@@ -270,7 +269,17 @@ b:   .asciiz "Thank you.\n"
      la    $a0, a
      syscall
 
+     la    $a0, spc
+     li    $a1, 10
+     li    $v0, 8
+     syscall
+
+     li    $v0, 4
      la    $a0, b
+     syscall
+     la    $a0, spc
+     syscall
+     la    $a0, c
      syscall
 
      li    $v0, 10
