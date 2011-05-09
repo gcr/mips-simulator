@@ -9,11 +9,13 @@
 
 ; TOKENIZING
 (define-tokens value-tokens (REGISTER LITERAL WORD LABEL SECTION STRING))
-(define-empty-tokens op-tokens (NEWLINE COMMA OP CP EOF))
+(define-empty-tokens punctuation-tokens (NEWLINE COMMA OP CP EOF))
+(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui l li la sb sh sw div divu mult multu bclt bclf))
 
 (define-lex-abbrevs
   ;; (:/ 0 9) would not work because the lexer does not understand numbers.  (:/ #\0 #\9) is ok too.
   [digit (:/ "0" "9")]
+  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "l" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf")]
   [number (:: (:? #\-)
               (:? (:: #\0 #\x))
               (:+ digit))]
@@ -39,12 +41,13 @@
    
    [#\" (token-STRING (list->string (get-string-token input-port)))]
    
+   [opcode        (string->symbol lexeme)]
    [word          (token-WORD lexeme)]
    [(:: #\. word) (token-SECTION (substring lexeme 1))]
    [#\(           (token-OP)]
    [#\)           (token-CP)]
    [#\,           (token-COMMA)]
-   [(:: #\$ word) (token-REGISTER (substring lexeme 1))]
+   [(:: #\$ word) (token-REGISTER (which-register? (substring lexeme 1)))]
    [(:: word #\:) (token-LABEL (substring lexeme 0 (- (string-length lexeme) 1)))]))
 
 (define (asm-parse! machine lexer)
@@ -52,25 +55,13 @@
     ; convenience function for switching around args and such.
     ; for the assembler.
     (let* ([opcode (find-opcode-with-name name)]
-           [args (match (cons name args)
-                   ; tweaks to each opcode.
-                   ; This transforms what's written (e.g. "add $rd, $rs, $rt")
-                   ; into the actual binary in the opcode (e.g. rs, rt, rd, shamt)
-                   [(list "add" rd rs rt)   (list rs rt rd 0)]
-                   [(list "addi" rt rs imm) (list rs rt imm)]
-                   [(list "addu" rd rs rt)   (list rs rt rd 0)]
-                   [(list "addiu" rt rs imm) (list rs rt imm)]
-                   [(list "sub" rd rs rt) (list rs rt rd 0)]
-                   [(list "subu" rd rs rt) (list rs rt rd 0)]
-                   [(cons _ args) args])] ; else
            [binary (send (find-opcode-with-name name) make-binary . args)])
-      (send machine add-opcode! binary)))
-  
+      (send machine add-opcode! binary)))  
   ((parser
     (src-pos)
     (start line-list)
     (end EOF)
-    (tokens value-tokens op-tokens)
+    (tokens value-tokens punctuation-tokens opcode-tokens)
     (error (λ (tok-ok? tok-name tok-value start end)
              (if tok-ok?
                  (printf "Wasn't expecting a ~a at line ~a\n" tok-name (position-line start))
@@ -89,22 +80,22 @@
             `(declaration-str ,$1 ,$2)]
            [(SECTION LITERAL NEWLINE)
             `(declaration-literal ,$1 ,$2)]
-           [(WORD place COMMA place COMMA place NEWLINE)
-            (op $1 $2 $4 $6)] ; arithmetic and immediate
-           [(WORD WORD NEWLINE)
-            (op $1 $2)]
-           [(WORD REGISTER NEWLINE)
-            (op $1 $2)]
-           [(WORD NEWLINE)
-            (op $1)]
-           [(WORD place COMMA WORD NEWLINE)
-            (op $1 $2 $4)]
-           [(WORD place COMMA place NEWLINE)
-            (op $1 $2 $4)])
-     
-     (place [(REGISTER) (which-register? $1)]
-            [(LITERAL) $1]
-            [(LITERAL OP REGISTER CP) `(offset ,$3 ,$1)])))
+           
+           ; add rd, rs, rt
+           [(add REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+            (op "add" $4 $6 $2 0)]
+           ;          rs rt rd shamt
+           
+           [(sub REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+            (op "sub" $4 $6 $2 0)]
+           [(addi REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+            (op "addi" $4 $2 $6)]
+           [(addu REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
+            (op "addu" $4 $6 $2 0)]
+           [(addiu REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
+            (op "addiu" $4 $2 $6)]
+           
+           )))
    lexer))
 
 (define (asm-load-into-machine input)
