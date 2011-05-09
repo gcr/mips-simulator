@@ -166,6 +166,14 @@
         [funct (λ (rs rt imm mips)
                  (set-reg! mips rt (if (< (get-reg mips rs) imm) 1 0)))])
    
+   (new opcode%
+        [name "beq"]
+        [matches '([#x4 6] 5 5 16)]
+        [funct (λ (rs rt addr mips)
+                 (let ([addr (signed (sign-extend addr))])
+                   (when (= (get-reg mips rs) (get-reg mips rt))
+                     (send mips set-pc! (+ (send mips get-pc) (* addr 4))))))])
+   
    ))
 
 (define (find-opcode-with-name name)

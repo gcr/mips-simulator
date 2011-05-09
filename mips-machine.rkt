@@ -53,9 +53,12 @@
       (mem-set-word! pc opcode #f)
       (set! pc (+ 4 pc)))
     
+    (define/public (add-opcode-to! addr opcode)
+      (mem-set-word! addr opcode #f))
+    
     (define/public (set-pc! val)
       (set! pc val))
-    (define/public (get-pc val)
+    (define/public (get-pc)
       pc)
     
     (define/public (debug-registers)

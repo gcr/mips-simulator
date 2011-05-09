@@ -48,18 +48,41 @@
    [(:: word #\:) (token-LABEL (substring lexeme 0 (- (string-length lexeme) 1)))]))
 
 (define (asm-parse! machine lexer)
+  (define post-compile-operations '())
+  (define label-table (make-hash))
+  
   (define (load-op! name . args)
     ; convenience function: load the given op into the current machine
     (let* ([opcode (find-opcode-with-name name)]
            [binary (send (find-opcode-with-name name) make-binary . args)])
+      (printf "~a ~a\n" name args)
       (send machine add-opcode! binary)))
+  (define (load-op-to! addr name . args)
+    (let* ([opcode (find-opcode-with-name name)]
+           [binary (send (find-opcode-with-name name) make-binary . args)])
+      (send machine add-opcode-to! addr binary)))
   
-  (define (label-hole! word)
-    ; creates a 'hole' to fill in later
-    (error "not yet! " word))
-  (define (label-position! word)
+  (define (defer-op! name . args)
+    ; set up this op to be filled in with a label when the time comes
+    (let ([current-addr (send machine get-pc)])
+      (printf "Deferred op at addr ~a: ~a ~a\n" current-addr name args)
+      (set! post-compile-operations
+            (cons (λ ()
+                    (printf "Applying ~a ~a to address ~a\n" name args current-addr)
+                    ; when it's all compiled, fill it in true
+                    (apply load-op-to! current-addr name
+                           (map (match-lambda [(box label) (/ (- (hash-ref label-table label) current-addr 4) 4)]
+                                              [x x]) args)))
+                  post-compile-operations))
+      ; for now, pretend it's a 0
+      (apply load-op! name
+             (map (match-lambda [(box label) 0]
+                                [x x]) args))))
+  
+  (define (new-label! word)
     ; sets this label in the label table
-    (error "no no no! " word))
+    (printf "Label: ~a at addr ~a\n" word (send machine get-pc))
+    (hash-set! label-table word (send machine get-pc)))
   
   ((parser
     (src-pos)
@@ -77,7 +100,7 @@
                 [(NEWLINE line-list) $2])
      ; most of these are passing the list to 'load-op!' above which handles all the dirty work
      (line [(LABEL)
-            (label-position! $1)] ; TODO
+            (new-label! $1)] ; TODO
            [(SECTION NEWLINE)
             `(section ,$1)] ; TODO
            [(SECTION STRING NEWLINE)
@@ -137,17 +160,17 @@
            [(sltu REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
             (load-op! "sltu"  $4 $6 $2 0)]
            [(beq REGISTER COMMA REGISTER COMMA WORD NEWLINE)
-            (load-op! "beq"  $2 $4 (label-hole! $6))]
+            (defer-op! "beq"  $2 $4 (box $6))]
            [(bne REGISTER COMMA REGISTER COMMA WORD NEWLINE)
-            (load-op! "bne"  $2 $4 (label-hole! $6))]
+            (defer-op! "bne"  $2 $4 (box $6))]
            [(blt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
             (begin (load-op! "slt"  $2 $4 (which-register? "at"))
-                   (load-op! "bne"  (which-register? "at") (which-register? ("zero") (label-hole! $6))))]
+                   (defer-op! "bne"  (which-register? "at") (which-register? ("zero") (box $6))))]
            ; TODO: bgt, ble, bge
            [(j WORD NEWLINE)
-            (load-op! "j" (label-hole! $2))]
+            (defer-op! "j" (box $2))]
            [(jal WORD NEWLINE)
-            (load-op! "jal" (label-hole! $2))]
+            (defer-op! "jal" (box $2))]
            [(jr REGISTER NEWLINE)
             (load-op! "jr" $2 0 0 0)]
            [(jalr REGISTER NEWLINE)
@@ -178,7 +201,10 @@
            
            
            )))
-   lexer))
+   lexer)
+  (when (> (length post-compile-operations) 0)
+    (displayln "Second pass...")
+    (map (λ (op) (op)) post-compile-operations)))
 
 (define (asm-load-into-machine input)
   (port-count-lines! input)
@@ -189,13 +215,12 @@
 
 ;;;
 (define f (open-input-string #<<EOF
-addi $t0, $zero, 12
-addi $t1, $zero, 15
-slt $t2, $t0, $t1
-slt $t3, $t1, $t0
-slti $t4, $t0, 250
-slti $t5, $t0, -250
-sltiu $t6, $t0, -250
+     addi $t0, $zero, 12
+bar: addi $t1, $t1, 5
+     beq $zero, $zero, foo
+     sub $t2, $t2, $t2
+     sub $t2, $t2, $t2
+foo: beq $zero, $zero, bar
 
 EOF
                              ))

@@ -43,7 +43,6 @@
                           (apply funct (append args extra-args)))))
     
     (define/public (make-binary . args)
-      (printf "making binary ~a w/ args ~a\n" name args)
       ; returns a new binary number w/ the holes
       (let next-matcher ([sofar 0]
                          [matchers matches]
