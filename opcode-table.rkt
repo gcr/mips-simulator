@@ -14,6 +14,13 @@
                          16)
        (bitwise-bit-field n 0 16))))
 
+(define (signed-byte n)
+  ;; sign-extends n from 8 bits to 32 bits and signs it
+  (signed (let ([leftmost-bit (if (bitwise-bit-set? n 7) 1 0)])
+            (+ (arithmetic-shift (bitwise-bit-field (- leftmost-bit) 0 24)
+                                 8)
+               (bitwise-bit-field n 0 8)))))
+
 (define (signed n)
   ;; usually registers are 32-bit unsigned.
   ;; this converts them into 32-bit signed.
@@ -173,6 +180,98 @@
                  (let ([addr (signed (sign-extend addr))])
                    (when (= (get-reg mips rs) (get-reg mips rt))
                      (send mips set-pc! (+ (send mips get-pc) (* addr 4))))))])
+   
+   (new opcode%
+        [name "bne"]
+        [matches '([#x5 6] 5 5 16)]
+        [funct (λ (rs rt addr mips)
+                 (let ([addr (signed (sign-extend addr))])
+                   (when (not (= (get-reg mips rs) (get-reg mips rt)))
+                     (send mips set-pc! (+ (send mips get-pc) (* addr 4))))))])
+   
+   (new opcode%
+        [name "j"]
+        [matches '([#x2 6] 26)]
+        [funct (λ (addr mips)
+                 (let ([addr (* 4 addr)])
+                   (send mips set-pc! addr)))])
+   
+   (new opcode%
+        [name "jal"]
+        [matches '([#x3 6] 26)]
+        [funct (λ (addr mips)
+                 (let ([addr (* 4 addr)])
+                   (set-reg! mips 31 (send mips get-pc)) ; $pc -> $ra
+                   (send mips set-pc! addr)))])
+   
+   (new opcode%
+        [name "jr"]
+        [matches '([#x0 6] 5 5 5 5 [#x8 6])]
+        [funct (λ (rs rt rd shamt mips)
+                   (send mips set-pc! (get-reg mips rs)))])
+   
+   (new opcode%
+        [name "jalr"]
+        [matches '([#x0 6] 5 5 5 5 [#x9 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips 31 (send mips get-pc)) ; $pc -> $ra
+                 (send mips set-pc! (get-reg mips rs)))])
+   
+   (new opcode%
+        [name "lb"]
+        [matches '([#x32 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (let* ([addr (+ (get-reg mips rs) (sign-extend imm))]
+                        [byte (signed-byte (send mips mem-byte addr))])
+                   (set-reg! mips rt byte)))])
+   
+   (new opcode%
+        [name "lbu"]
+        [matches '([#x24 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (let* ([addr (+ (get-reg mips rs) (sign-extend imm))]
+                        [byte (send mips mem-byte addr)])
+                   (set-reg! mips rt byte)))])
+   
+   (new opcode%
+        [name "lhu"]
+        [matches '([#x25 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (let* ([addr (+ (get-reg mips rs) (sign-extend imm))]
+                        [hw (arithmetic-shift (send mips mem-word addr #f) -16)])
+                   (set-reg! mips rt hw)))])
+   
+   (new opcode%
+        [name "lw"]
+        [matches '([#x23 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (let* ([addr (+ (get-reg mips rs) (sign-extend imm))]
+                        [word (send mips mem-word addr #f)])
+                   (set-reg! mips rt word)))])
+   
+   (new opcode%
+        [name "lui"]
+        [matches '([#xf 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (set-reg! mips rt (arithmetic-shift imm 16)))])
+   
+      (new opcode%
+        [name "sb"]
+        [matches '([#x28 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (let* ([addr (+ (get-reg mips rs) (sign-extend imm))]
+                        [byte (bitwise-bit-field (get-reg mips rt) 0 8)])
+                   (send mips mem-set-byte! addr byte)))])
+      
+      (new opcode%
+        [name "sw"]
+        [matches '([#x26 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (let* ([addr (+ (get-reg mips rs) (sign-extend imm))]
+                        [word (get-reg mips rt)])
+                   (send mips mem-set-word! addr word)))])
+      
+      ; TODO: syscall
    
    ))
 

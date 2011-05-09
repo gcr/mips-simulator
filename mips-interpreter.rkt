@@ -71,12 +71,19 @@
                     (printf "Applying ~a ~a to address ~a\n" name args current-addr)
                     ; when it's all compiled, fill it in true
                     (apply load-op-to! current-addr name
-                           (map (match-lambda [(box label) (/ (- (hash-ref label-table label) current-addr 4) 4)]
+                           (map (match-lambda [`(branch ,label)
+                                               (/ (- (hash-ref label-table label) current-addr 4) 4)]
+                                              [`(jump ,label)
+                                               (/ (hash-ref label-table label) 4)]
+                                              [`(la-high ,label)
+                                               (bitwise-bit-field (/ (hash-ref label-table label) 4) 16 32)]
+                                              [`(la-low ,label)
+                                               (bitwise-bit-field (/ (hash-ref label-table label) 4) 0 16)]
                                               [x x]) args)))
                   post-compile-operations))
       ; for now, pretend it's a 0
       (apply load-op! name
-             (map (match-lambda [(box label) 0]
+             (map (match-lambda [(list _ label) 0]
                                 [x x]) args))))
   
   (define (new-label! word)
@@ -160,22 +167,31 @@
            [(sltu REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
             (load-op! "sltu"  $4 $6 $2 0)]
            [(beq REGISTER COMMA REGISTER COMMA WORD NEWLINE)
-            (defer-op! "beq"  $2 $4 (box $6))]
+            (defer-op! "beq"  $2 $4 `(branch ,$6))]
            [(bne REGISTER COMMA REGISTER COMMA WORD NEWLINE)
-            (defer-op! "bne"  $2 $4 (box $6))]
+            (defer-op! "bne"  $2 $4 `(branch ,$6))]
            [(blt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
             (begin (load-op! "slt"  $2 $4 (which-register? "at"))
-                   (defer-op! "bne"  (which-register? "at") (which-register? ("zero") (box $6))))]
-           ; TODO: bgt, ble, bge
+                   (defer-op! "bne"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+           [(bgt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+            (begin (load-op! "slt"  $4 $2 (which-register? "at"))
+                   (defer-op! "bne"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+           [(ble REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+            (begin (load-op! "slt"  $4 $2 (which-register? "at"))
+                   (defer-op! "beq"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+           [(bge REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
+            (begin (load-op! "slt"  $2 $4 (which-register? "at"))
+                   (defer-op! "beq"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
            [(j WORD NEWLINE)
-            (defer-op! "j" (box $2))]
+            (defer-op! "j" `(jump ,$2))]
            [(jal WORD NEWLINE)
-            (defer-op! "jal" (box $2))]
+            (defer-op! "jal" `(jump ,$2))]
            [(jr REGISTER NEWLINE)
             (load-op! "jr" $2 0 0 0)]
            [(jalr REGISTER NEWLINE)
             (load-op! "jalr" $2 0 0 0)]
-           ; TODO: move
+           [(move REGISTER COMMA REGISTER NEWLINE)
+            (load-op! "add" $2 $4 0 0)]
            [(syscall NEWLINE)
             (load-op! "syscall")]
            [(lb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
@@ -190,11 +206,14 @@
             (load-op! "lui" 0 $2 $4)]
            [(lw REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
             (load-op! "lw" $6 $2 $4)]
-           ; TODO: li, la
+           [(li REGISTER COMMA LITERAL NEWLINE)
+            (begin (load-op! "lui" 0 $2 (bitwise-bit-field $4 16 32))
+                   (load-op! "ori" $2 $2 (bitwise-bit-field $4 0 16)))]
+           [(la REGISTER COMMA WORD NEWLINE)
+            (begin (defer-op! "lui" 0 $2 `(la-high ,$4))
+                   (defer-op! "ori" $2 $2 `(la-low ,$4)))]
            [(sb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
             (load-op! "sb" $6 $2 $4)]
-           [(sh REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op! "sh" $6 $2 $4)]
            [(sw REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
             (load-op! "sw" $6 $2 $4)]
            
@@ -215,12 +234,11 @@
 
 ;;;
 (define f (open-input-string #<<EOF
-     addi $t0, $zero, 12
-bar: addi $t1, $t1, 5
-     beq $zero, $zero, foo
-     sub $t2, $t2, $t2
-     sub $t2, $t2, $t2
-foo: beq $zero, $zero, bar
+foo: addi $t0, $t0, 3500
+     la $t0, bar
+     sb $t0, 0($t1)
+     j foo
+bar: add $t0, $t0, $t0
 
 EOF
                              ))
