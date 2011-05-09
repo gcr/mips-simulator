@@ -8,14 +8,13 @@
          (prefix-in : parser-tools/lex-sre))
 
 ; TOKENIZING
-(define-tokens value-tokens (REGISTER LITERAL WORD LABEL SECTION STRING))
+(define-tokens value-tokens (REGISTER LITERAL LABEL SECTION STRING))
 (define-empty-tokens punctuation-tokens (NEWLINE COMMA OP CP EOF))
 (define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui l li la sb sh sw div divu mult multu bclt bclf))
 
 (define-lex-abbrevs
   ;; (:/ 0 9) would not work because the lexer does not understand numbers.  (:/ #\0 #\9) is ok too.
   [digit (:/ "0" "9")]
-  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "l" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf")]
   [number (:: (:? #\-)
               (:? (:: #\0 #\x))
               (:+ digit))]
@@ -36,13 +35,9 @@
    [#\newline  (token-NEWLINE)]
    [whitespace (return-without-pos (asm-lex input-port))] ; skip over whitespace
    [(:: #\#    (:* (:~ #\newline))) (return-without-pos (asm-lex input-port))] ; comments
-   
    [number (token-LITERAL (string->number (regexp-replace #px"(-?)0x" lexeme "#x\\1")))]
-   
    [#\" (token-STRING (list->string (get-string-token input-port)))]
-   
-   [opcode        (string->symbol lexeme)]
-   [word          (token-WORD lexeme)]
+   [word          (string->symbol lexeme)]
    [(:: #\. word) (token-SECTION (substring lexeme 1))]
    [#\(           (token-OP)]
    [#\)           (token-CP)]
@@ -51,7 +46,7 @@
    [(:: word #\:) (token-LABEL (substring lexeme 0 (- (string-length lexeme) 1)))]))
 
 (define (asm-parse! machine lexer)
-  (define (op name . args)
+  (define (load-op! name . args)
     ; convenience function for switching around args and such.
     ; for the assembler.
     (let* ([opcode (find-opcode-with-name name)]
@@ -64,9 +59,9 @@
     (tokens value-tokens punctuation-tokens opcode-tokens)
     (error (λ (tok-ok? tok-name tok-value start end)
              (if tok-ok?
-                 (printf "Wasn't expecting a ~a at line ~a\n" tok-name (position-line start))
-                 (printf "What on earth is this? ~a ~a at line ~a\n"
-                         tok-name tok-value (position-line start)))))
+                 (printf "Wasn't expecting \"~a\" at line ~a\n" tok-name (position-line start))
+                 (printf "What on earth is a \"~a\" at line ~a?\n"
+                         tok-name (position-line start)))))
     (grammar
      (line-list [() '()]
                 [(line line-list) (cons $1 $2)]
@@ -81,19 +76,23 @@
            [(SECTION LITERAL NEWLINE)
             `(declaration-literal ,$1 ,$2)]
            
+           ; Here we define how each opcode is read. We may switch
+           ; around arguments, do other things, etc. Mapping the
+           ; semantic structure of the opcode to the actual binary.
+           
            ; add rd, rs, rt
            [(add REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
-            (op "add" $4 $6 $2 0)]
-           ;          rs rt rd shamt
+            (load-op! "add" $4 $6 $2 0)]
+           ;                rs rt rd shamt
            
            [(sub REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
-            (op "sub" $4 $6 $2 0)]
+            (load-op! "sub" $4 $6 $2 0)]
            [(addi REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
-            (op "addi" $4 $2 $6)]
+            (load-op! "addi" $4 $2 $6)]
            [(addu REGISTER COMMA REGISTER COMMA REGISTER NEWLINE)
-            (op "addu" $4 $6 $2 0)]
+            (load-op! "addu" $4 $6 $2 0)]
            [(addiu REGISTER COMMA REGISTER COMMA LITERAL NEWLINE)
-            (op "addiu" $4 $2 $6)]
+            (load-op! "addiu" $4 $2 $6)]
            
            )))
    lexer))
