@@ -39,7 +39,7 @@
     (define/public (execute binary . extra-args)
       ; runs the given binary opcode, optionally with extra arguments...
       (with-args binary (λ args
-                          (printf "executing ~a with ~a and ~a" name args extra-args)
+                          ; (printf "executing ~a with ~a and ~a" name args extra-args)
                           (apply funct (append args extra-args)))))
     
     (define/public (make-binary . args)
