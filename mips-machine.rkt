@@ -58,6 +58,11 @@
     (define/public (get-pc val)
       pc)
     
+    (define/public (debug-registers)
+      (for ([i (in-vector registers)]
+            [j (in-naturals)])
+        (printf "~a: ~b\n" j i)))
+    
     (define/public (step-one!)
       (let* ([next-instruction (mem-word pc #f)]
              [opcode (find-matching-opcode next-instruction)])

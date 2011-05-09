@@ -71,6 +71,101 @@
         [funct (λ (rs rt imm mips)
                  (set-reg! mips rt (bitwise-and (get-reg mips rs) imm)))])
    
+   (new opcode%
+        [name "nor"]
+        [matches '([#x0 6] 5 5 5 5 [#x27 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (bitwise-not (bitwise-ior (get-reg mips rs) (get-reg mips rt)))))])
+   
+   (new opcode%
+        [name "or"]
+        [matches '([#x0 6] 5 5 5 5 [#x25 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (bitwise-ior (get-reg mips rs) (get-reg mips rt))))])
+   
+   (new opcode%
+        [name "ori"]
+        [matches '([#xd 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (set-reg! mips rt (bitwise-ior (get-reg mips rs) imm)))])
+
+   (new opcode%
+        [name "xor"]
+        [matches '([#x0 6] 5 5 5 5 [#x26 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (bitwise-xor (get-reg mips rs) (get-reg mips rt))))])
+   
+   (new opcode%
+        [name "xori"]
+        [matches '([#xe 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (set-reg! mips rt (bitwise-xor (get-reg mips rs) imm)))])
+   
+   (new opcode%
+        [name "sll"]
+        [matches '([#x0 6] 5 5 5 5 [#x0 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (arithmetic-shift (get-reg mips rt) shamt)))])
+   
+   (new opcode%
+        [name "srl"]
+        [matches '([#x0 6] 5 5 5 5 [#x2 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (arithmetic-shift (get-reg mips rt) (- shamt))))])
+   
+   (new opcode%
+        [name "sra"]
+        [matches '([#x0 6] 5 5 5 5 [#x3 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (arithmetic-shift (signed (get-reg mips rt)) (- shamt))))])
+   
+   (new opcode%
+        [name "sllv"]
+        [matches '([#x0 6] 5 5 5 5 [#x4 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (arithmetic-shift (get-reg mips rt) (get-reg mips rs))))])
+   
+   (new opcode%
+        [name "srlv"]
+        [matches '([#x0 6] 5 5 5 5 [#x6 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (arithmetic-shift (get-reg mips rt) (- (get-reg mips rs)))))])
+   
+   (new opcode%
+        [name "srav"]
+        [matches '([#x0 6] 5 5 5 5 [#x7 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (arithmetic-shift (signed (get-reg mips rt)) (- (get-reg mips rs)))))])
+   
+   (new opcode%
+        [name "slt"]
+        [matches '([#x0 6] 5 5 5 5 [#x2a 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (if (< (signed (get-reg mips rs))
+                                          (signed (get-reg mips rt)))
+                                       1 0)))])
+   
+   (new opcode%
+        [name "slti"]
+        [matches '([#xa 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (set-reg! mips rt (if (< (signed (get-reg mips rs))
+                                          (signed (sign-extend imm)))
+                                       1 0)))])
+   
+   (new opcode%
+        [name "sltu"]
+        [matches '([#x0 6] 5 5 5 5 [#x2b 6])]
+        [funct (λ (rs rt rd shamt mips)
+                 (set-reg! mips rd (if (< (get-reg mips rs) (get-reg mips rt))
+                                       1 0)))])
+   
+   (new opcode%
+        [name "sltiu"]
+        [matches '([#xb 6] 5 5 16)]
+        [funct (λ (rs rt imm mips)
+                 (set-reg! mips rt (if (< (get-reg mips rs) imm) 1 0)))])
+   
    ))
 
 (define (find-opcode-with-name name)

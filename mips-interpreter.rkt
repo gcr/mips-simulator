@@ -10,7 +10,7 @@
 ; TOKENIZING
 (define-tokens value-tokens (REGISTER LITERAL LABEL WORD SECTION STRING))
 (define-empty-tokens punctuation-tokens (NEWLINE COMMA OP CP EOF))
-(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui l li la sb sh sw div divu mult multu bclt bclf))
+(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui lw li la sb sh sw div divu mult multu bclt bclf syscall))
 
 (define-lex-abbrevs
   ;; (:/ 0 9) would not work because the lexer does not understand numbers.  (:/ #\0 #\9) is ok too.
@@ -18,7 +18,7 @@
   [number (:: (:? #\-)
               (:? (:: #\0 #\x))
               (:+ digit))]
-  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "l" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf")]
+  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "lw" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf" "syscall")]
   [word (:+ (:or alphabetic digit #\_))])
 
 (define get-string-token
@@ -154,26 +154,26 @@
             (load-op! "jalr" $2 0 0 0)]
            ; TODO: move
            [(syscall NEWLINE)
-            (load-op "syscall")]
+            (load-op! "syscall")]
            [(lb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "lb" $6 $2 $4)]
+            (load-op! "lb" $6 $2 $4)]
            [(lbu REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "lbu" $6 $2 $4)]
+            (load-op! "lbu" $6 $2 $4)]
            [(lh REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "lh" $6 $2 $4)]
+            (load-op! "lh" $6 $2 $4)]
            [(lhu REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "lhu" $6 $2 $4)]
+            (load-op! "lhu" $6 $2 $4)]
            [(lui REGISTER COMMA LITERAL NEWLINE)
-            (load-op "lui" 0 $2 $4)]
+            (load-op! "lui" 0 $2 $4)]
            [(lw REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "lw" $6 $2 $4)]
+            (load-op! "lw" $6 $2 $4)]
            ; TODO: li, la
            [(sb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "sb" $6 $2 $4)]
+            (load-op! "sb" $6 $2 $4)]
            [(sh REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "sh" $6 $2 $4)]
+            (load-op! "sh" $6 $2 $4)]
            [(sw REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
-            (load-op "sw" $6 $2 $4)]
+            (load-op! "sw" $6 $2 $4)]
            
            
            
@@ -189,10 +189,13 @@
 
 ;;;
 (define f (open-input-string #<<EOF
-addi $t0, $zero, -1
-addi $t1, $zero, -2
-and $t2, $t0, $t1
-andi $t3, $t2, 31
+addi $t0, $zero, 12
+addi $t1, $zero, 15
+slt $t2, $t0, $t1
+slt $t3, $t1, $t0
+slti $t4, $t0, 250
+slti $t5, $t0, -250
+sltiu $t6, $t0, -250
 
 EOF
                              ))
