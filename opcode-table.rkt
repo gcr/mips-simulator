@@ -271,7 +271,21 @@
                         [word (get-reg mips rt)])
                    (send mips mem-set-word! addr word)))])
       
-      ; TODO: syscall
+      (new opcode%
+        [name "syscall"]
+        [matches '([#x0 26] [#xb 6])]
+        [funct (λ (mips)
+                 (let ([v0 (get-reg mips 2)]
+                       [a0 (get-reg mips 4)])
+                   (match v0
+                     [1 (displayln (signed a0))]
+                     [4 (let next-byte ([addr a0])
+                          (let ([b (send mips mem-byte addr)])
+                            (unless (= b 0)
+                              (display (integer->char b))
+                              (next-byte (+ 1 addr)))))]
+                     [5 (set-reg! mips 2 (string->number (read-line)))]
+                     [10 (error 'exit)])))])
    
    ))
 

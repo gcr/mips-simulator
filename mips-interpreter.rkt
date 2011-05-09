@@ -10,7 +10,7 @@
 ; TOKENIZING
 (define-tokens value-tokens (REGISTER LITERAL LABEL WORD SECTION STRING))
 (define-empty-tokens punctuation-tokens (NEWLINE COMMA OP CP EOF))
-(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui lw li la sb sh sw div divu mult multu bclt bclf syscall))
+(define-empty-tokens opcode-tokens (add addi addiu addu sub subu and andi nor or ori xor xori sll srl sra sllv srlv srav slt slti sltiu sltu beq bne blt bgt ble bge j jal jr jalr move lb lbu lh lhu lui lw li la sb sh sw div divu mult multu bclt bclf syscall .text .data .asciiz .ascii .align))
 
 (define-lex-abbrevs
   ;; (:/ 0 9) would not work because the lexer does not understand numbers.  (:/ #\0 #\9) is ok too.
@@ -18,7 +18,7 @@
   [number (:: (:? #\-)
               (:? (:: #\0 #\x))
               (:+ digit))]
-  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "lw" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf" "syscall")]
+  [opcode (:or "add" "addi" "addiu" "addu" "sub" "subu" "and" "andi" "nor" "or" "ori" "xor" "xori" "sll" "srl" "sra" "sllv" "srlv" "srav" "slt" "slti" "sltiu" "sltu" "beq" "bne" "blt" "bgt" "ble" "bge" "j" "jal" "jr" "jalr" "move" "lb" "lbu" "lh" "lhu" "lui" "lw" "li" "la" "sb" "sh" "sw" "div" "divu" "mult" "multu" "bclt" "bclf" "syscall" ".text" ".data" ".asciiz" ".ascii" ".align")]
   [word (:+ (:or alphabetic digit #\_))])
 
 (define get-string-token
@@ -39,8 +39,7 @@
    [number (token-LITERAL (string->number (regexp-replace #px"(-?)0x" lexeme "#x\\1")))]
    [#\" (token-STRING (list->string (get-string-token input-port)))]
    [opcode         (string->symbol lexeme)]
-   [word           (token-WORD lexeme)]  
-   [(:: #\. word) (token-SECTION (substring lexeme 1))]
+   [word           (token-WORD lexeme)]
    [#\(           (token-OP)]
    [#\)           (token-CP)]
    [#\,           (token-COMMA)]
@@ -76,9 +75,9 @@
                                               [`(jump ,label)
                                                (/ (hash-ref label-table label) 4)]
                                               [`(la-high ,label)
-                                               (bitwise-bit-field (/ (hash-ref label-table label) 4) 16 32)]
+                                               (bitwise-bit-field (hash-ref label-table label) 16 32)]
                                               [`(la-low ,label)
-                                               (bitwise-bit-field (/ (hash-ref label-table label) 4) 0 16)]
+                                               (bitwise-bit-field (hash-ref label-table label) 0 16)]
                                               [x x]) args)))
                   post-compile-operations))
       ; for now, pretend it's a 0
@@ -107,11 +106,17 @@
                 [(NEWLINE line-list) $2])
      ; most of these are passing the list to 'load-op!' above which handles all the dirty work
      (line [(LABEL)
-            (new-label! $1)] ; TODO
-           [(SECTION NEWLINE)
-            `(section ,$1)] ; TODO
-           [(SECTION STRING NEWLINE)
-            `(declaration-str ,$1 ,$2)] ; TODO
+            (new-label! $1)]
+           [(.text NEWLINE)
+            (send machine reset-pc-text!)]
+           [(.data NEWLINE)
+            (send machine reset-pc-data!)]
+           [(.asciiz STRING NEWLINE)
+            (send machine add-bytes! (bytes-append (string->bytes/utf-8 $2) #"\0"))]
+           [(.ascii STRING NEWLINE)
+            (send machine add-bytes! (string->bytes/utf-8 $2))]
+           [(.align LITERAL NEWLINE)
+            (send machine align! $2)]
            [(SECTION LITERAL NEWLINE)
             `(declaration-literal ,$1 ,$2)] ; TODO
            
@@ -171,17 +176,17 @@
            [(bne REGISTER COMMA REGISTER COMMA WORD NEWLINE)
             (defer-op! "bne"  $2 $4 `(branch ,$6))]
            [(blt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
-            (begin (load-op! "slt"  $2 $4 (which-register? "at"))
-                   (defer-op! "bne"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+            (begin (load-op! "slt"  $2 $4 (which-register? "at") 0)
+                   (defer-op! "bne"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
            [(bgt REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
-            (begin (load-op! "slt"  $4 $2 (which-register? "at"))
-                   (defer-op! "bne"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+            (begin (load-op! "slt"  $4 $2 (which-register? "at") 0)
+                   (defer-op! "bne"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
            [(ble REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
-            (begin (load-op! "slt"  $4 $2 (which-register? "at"))
-                   (defer-op! "beq"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+            (begin (load-op! "slt"  $4 $2 (which-register? "at") 0)
+                   (defer-op! "beq"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
            [(bge REGISTER COMMA REGISTER COMMA WORD NEWLINE) ; TODO TEST!!!
-            (begin (load-op! "slt"  $2 $4 (which-register? "at"))
-                   (defer-op! "beq"  (which-register? "at") (which-register? ("zero") `(branch ,$6))))]
+            (begin (load-op! "slt"  $2 $4 (which-register? "at") 0)
+                   (defer-op! "beq"  (which-register? "at") (which-register? "zero") `(branch ,$6)))]
            [(j WORD NEWLINE)
             (defer-op! "j" `(jump ,$2))]
            [(jal WORD NEWLINE)
@@ -191,7 +196,7 @@
            [(jalr REGISTER NEWLINE)
             (load-op! "jalr" $2 0 0 0)]
            [(move REGISTER COMMA REGISTER NEWLINE)
-            (load-op! "add" $2 $4 0 0)]
+            (load-op! "add" 0 $4 $2 0)]
            [(syscall NEWLINE)
             (load-op! "syscall")]
            [(lb REGISTER COMMA LITERAL OP REGISTER CP NEWLINE)
@@ -229,18 +234,49 @@
   (port-count-lines! input)
   (define m (new mips-machine%))
   (asm-parse! m (λ () (asm-lex input)))
-  (send m set-pc! 0)
+  (send m reset-pc-text!)
   m)
 
 ;;;
-(define f (open-input-string #<<EOF
-foo: addi $t0, $t0, 3500
-     la $t0, bar
-     sb $t0, 0($t1)
-     j foo
-bar: add $t0, $t0, $t0
+(define double-test (open-input-string #<<EOF
+
+              # Successively double numbers
+              li     $v0, 5                   # read int
+              syscall
+              move   $a0, $v0
+notbigenough: add    $a0, $a0, $a0            # a0 *= 2 until a0 < 1250
+              li     $t0, 1250
+              li     $v0, 1                   # print
+              syscall
+
+              blt    $a0, $t0, notbigenough(
+
+              li     $v0, 10                  # exit
+              syscall
 
 EOF
-                             ))
+))
 
-(define m (asm-load-into-machine f))
+(define data-test (open-input-string #<<EOF
+
+.data
+a:   .asciiz "Hello there, enter your name> "
+.align 2
+b:   .asciiz "Thank you.\n"
+.align 2
+
+.text
+     li    $v0, 4
+     la    $a0, a
+     syscall
+
+     la    $a0, b
+     syscall
+
+     li    $v0, 10
+     syscall
+
+EOF
+))
+
+(define m (asm-load-into-machine data-test))
